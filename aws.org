@@ -1,0 +1,209 @@
+#+TITLE:Amazon Web Services (AWS)
+#+Author: Saiadithya
+
+
+An EC2 instance is like a remote computer running Windows or Linux and
+on which you can install whatever software you want, including a Web
+server running PHP code and a database server.
+
+Amazon S3 is just a storage service, typically used to store large
+binary files. Amazon also has other storage and database services,
+like RDS for relational databases and DynamoDB for NoSQL
+
+* Amazon S3
+
+** Bucket
+Amazon S3 is cloud storage for the Internet. To upload your data
+(photos, videos, documents etc.), you first create a bucket in one of
+the AWS Regions. You can then upload any number of objects to the
+bucket.
+
+In terms of implementation, buckets and objects are resources, and
+Amazon S3 provides APIs for you to manage them.
+
+Amazon S3 bucket names are globally unique, regardless of the AWS
+Regionin which you create the bucket. You specify the name at the time you create the bucket.
+
+
+Objects belonging to a bucket that you create in a specific AWS Region never leave that region, unless you explicitly transfer them to another region.
+
+** Creating the connection
+
+#+BEGIN_SRC python :results output :session s3
+import boto3
+s3 = boto3.resource('s3')
+#+END_SRC
+
+#+RESULTS:
+
+#+RESULTS:`
+
+
+** Change the interpreter on the go
+
+#+begin_src emacs-lisp :results none
+(setq org-babel-python-command "python3")
+#+end_src
+
+
+#+BEGIN_SRC python :results output :session s3
+import sys
+print(sys.version)
+#+END_SRC
+
+#+RESULTS:
+: 3.5.2 (default, Nov 17 2016, 17:05:23)
+: [GCC 5.4.0 20160609
+** Lookup a bucket
+
+#+BEGIN_SRC python :results output :session s3
+import boto
+from boto.s3.connection import Location
+def create_bucket(bucket_name, location=Location.DEFAULT):
+    s3 = boto.connect_s3()
+    bucket = s3.lookup(bucket_name)
+    if bucket:
+        print('Bucket (%s) already exists' % bucket_name)
+
+create_bucket('saitempbucket')
+#+END_SRC
+
+#+RESULTS:
+:
+: >>> ... ... ... ... ... >>> Bucket (saitempbucket) already exists
+
+
+
+** Creating a bucket
+
+#+BEGIN_SRC python :results output :session s3
+#s3.create_bucket(Bucket='saibucket')
+s3.create_bucket(Bucket='saitempbucket', CreateBucketConfiguration={
+    'LocationConstraint': 'us-west-1'})
+#+END_SRC
+
+#+RESULTS:
+:
+: ... s3.Bucket(name='saitempbucket')
+
+** Storing data in a bucket
+
+
+#+BEGIN_SRC python :results output :session s3
+s3.Object('saitempbucket', 'new.txt').put(Body=open('/home/sai/new.txt', 'rb'))
+#+END_SRC
+
+#+RESULTS:
+: {'ETag': '"a8274137b9d344e89bc27d45ffd06669"', 'ResponseMetadata': {'RequestId': '93933E1B26A91BB0', 'HostId': 'xoJvPrCCUo1i0em4PjIbIL6/Sce62qeqABnznEONyldR/eT1LEm7NiPn13vC/TZXX8qMytK4ThM=', 'RetryAttempts': 0, 'HTTPStatusCode': 200, 'HTTPHeaders': {'date': 'Sun, 29 Jan 2017 04:20:16 GMT', 'x-amz-request-id': '93933E1B26A91BB0', 'server': 'AmazonS3', 'content-length': '0', 'etag': '"a8274137b9d344e89bc27d45ffd06669"', 'x-amz-id-2': 'xoJvPrCCUo1i0em4PjIbIL6/Sce62qeqABnznEONyldR/eT1LEm7NiPn13vC/TZXX8qMytK4ThM='}}}
+
+** access the data from the bucket
+
+#+BEGIN_SRC python :results output :session s3
+s3 = boto3.resource('s3')
+bucket = s3.Bucket('saitempbucket')
+from boto.s3.key import Key
+key = Key('new.txt')
+for obj in bucket.objects.all():
+    key = obj.key
+    body = obj.get()['Body'].read()
+    print(body)
+#+END_SRC
+
+#+RESULTS:
+:
+: >>> >>> >>> ... ... ... ... b'This is the content of my key'
+: b'hello\n'
+: b'G\xc3\xbcne\xc5\x9f Koru\n'
+
+** Access the size of the bucket
+
+#+BEGIN_SRC python :results output :session s3
+import boto
+s3 = boto.connect_s3()
+bucket = s3.lookup('saitempbucket')
+total_bytes = 0
+for key in bucket:
+    total_bytes += key.size
+    print(total_bytes)
+#+END_SRC
+
+#+RESULTS:
+:
+: >>> >>> ... ... ... 29
+: 35
+: 48
+
+** Disable logging
+#+BEGIN_SRC python :results output :session s3
+import logging
+logging.getLogger('saitempbucket').setLevel(logging.CRITICAL)
+#+END_SRC
+
+#+RESULTS:
+
+** Enable logging
+#+BEGIN_SRC python :results output :session s3
+bucket.enable_logging(target_bucket='saitempbucket',target_prefix=bucket.name)
+#+END_SRC
+
+#+RESULTS:
+: Traceback (most recent call last):
+:   File "<stdin>", line 1, in <module>
+:   File "/usr/local/lib/python3.5/dist-packages/boto/s3/bucket.py", line 1195, in enable_logging
+:     return self.set_xml_logging(blogging.to_xml(), headers=headers)
+:   File "/usr/local/lib/python3.5/dist-packages/boto/s3/bucket.py", line 1170, in set_xml_logging
+:     response.status, response.reason, body)
+: boto.exception.S3ResponseError: S3ResponseError: 400 Bad Request
+: <?xml version="1.0" encoding="UTF-8"?>
+: <Error><Code>InvalidTargetBucketForLogging</Code><Message>You must give the log-delivery group WRITE and READ_ACP permissions to the target bucket</Message><TargetBucket>saitempbucket</TargetBucket><RequestId>0312E8EEF04C7A00</RequestId><HostId>72WcGcfsZWtD1hv3Dg1xePq1zNbVMocEDTrv2k4ZZdCt/MVkR38Rx5KDDcbwStftaSEqax6jqRk=</HostId></Error>
+
+** Accessing a bucket
+
+#+BEGIN_SRC python :results output :session s3
+import botocore
+bucket = s3.Bucket('saitempbucket')
+exists = True
+try:
+    s3.meta.client.head_bucket(Bucket='saitempbucket')
+except botocore.exceptions.ClientError as e:
+    # If a client error is thrown, then check that it was a 404 error.
+    # If it was a 404 error, then the bucket does not exist.
+    error_code = int(e.response['Error']['Code'])
+    if error_code == 404:
+        exists = False
+#+END_SRC
+
+#+RESULTS:
+:
+: >>> >>> ... ... ... ... ... ... ... ... {'ResponseMetadata': {'HTTPHeaders': {'transfer-encoding': 'chunked', 'date': 'Sat, 28 Jan 2017 17:59:59 GMT', 'content-type': 'application/xml', 'x-amz-request-id': '9800F24A2A5A81B3', 'x-amz-bucket-region': 'us-west-1', 'x-amz-id-2': 'iU7jP1QZMSqrtgD2vW7iK0B8+JigjxrMPLMWNp9nSnYNzseRMU8qSgREMI+BkvZaqQdDbW/DeqA=', 'server': 'AmazonS3'}, 'HTTPStatusCode': 200, 'HostId': 'iU7jP1QZMSqrtgD2vW7iK0B8+JigjxrMPLMWNp9nSnYNzseRMU8qSgREMI+BkvZaqQdDbW/DeqA=', 'RequestId': '9800F24A2A5A81B3', 'RetryAttempts': 0}}
+
+
+** deleting a bucket
+
+#+BEGIN_SRC python :results output :session s3
+# Boto 3
+for key in bucket.objects.all():
+    key.delete()
+bucket.delete()
+#+END_SRC
+
+#+RESULTS:
+:
+: ... ...   File "<stdin>", line 4
+:     bucket.delete()
+:          ^
+: SyntaxError: invalid syntax
+
+
+** Iteration of Buckets and Keys
+
+#+BEGIN_SRC python :results output :session s3
+for bucket in s3.buckets.all():
+    for key in bucket.objects.all():
+        print(key.key)
+
+#+END_SRC
+
+#+RESULTS:
+:
+: ... ... hello.txt
